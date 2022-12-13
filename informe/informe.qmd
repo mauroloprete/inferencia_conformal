@@ -1,0 +1,1016 @@
+---
+title: "Inferencia Conformal"
+author: "Mauro Loprete y Maximiliano Saldaña"
+format: 
+  pdf:
+    documentclass: scrreprt
+date: "12/1/2022"
+date-format: "MMMM YYYY"
+number-sections: true
+toc: true
+bibliography: biblio.bib
+csl: apa-with-abstract.csl
+lang: es
+execute:
+  echo: true
+  include: true
+  warning: false
+knitr:
+  opts_knit:
+    verbose: true
+crossref:
+  chapters: true
+header-includes:
+  - \usepackage[linesnumbered,ruled,vlined]{algorithm2e}
+  - \usepackage{xcolor}
+  - \SetKwInput{KwInput}{Entrada}                
+  - \SetKwInput{KwOutput}{Salida}
+  - \SetAlgorithmName{Algoritmo}
+---
+
+# Introducción {#sec-intro}
+
+En @lei2017 los autores plantean un marco general para realizar inferencia predictiva sin supuestos distribucionales en un contexto de regresión, empleando la _inferencia conformal_. Mediante la metodología planteada se pueden obtener intervalos de confianza con validez en muestra finitas (no asintótica) para una variable de respuesta, empleando cualquier estimador de la función de regresión.
+
+El problema se plantea de la siguiente manera: Se considera $Z_1, \dots, Z_n \sim F$ i.i.d., donde $Z_i = (X_i, Y_i)$ es una variable aleatoria en $\mathbb{R}^d \times \mathbb{R}$, $Y_i$ es la variable de respuesta y $X_i = X_i(1) \dots, X_i(d)$ son las covariables. Se tiene tiene la función de regresión:
+
+$$
+\mu(x) = E(Y | X = x), \,\,\,\, x \in \mathbb{R}^d
+$$
+
+Es de interés predecir la nueva respuesta $Y_{n+1}$ a las covariables $X_{n+1}$, sin hacer supuestos sobre $\mu$ o $F$. Dado un nivel de cobertura $\alpha$, el objetivo es construir un intervalo de predicción $C \subseteq \mathbb{R}^d \times \mathbb{R}$ basado en $Z_1, \dots, Z_n$ que cumpla:
+
+$$
+P(Y_{n+1} \in C(X_{n+1})) \ge 1-\alpha
+$$
+
+En esta expresión se supone que $Z_{n+1} = (X_{n+1}, Y_{n+1})$ proviene también de la distribución $F$ y $C(x) = \{y \in \mathbb{R}: (x,y) \in C\}, \,\,\, x \in \mathbb{R}^d$
+
+# Inferencia conformal {#sec-InfConf}
+
+La idea básica de la inferencia conformal, dadas las definiciones de la introducción, consiste en que para decidir si un valor $y$ está incluido en el intervalo $C(X_{n+1})$ consideramos poner a prueba la hipótesis nula de que $Y_{n+1} = y$ y se construye un valor-p válido basado en los cuantiles empíricos de la muestra aumentada $Z_1, \dots, Z_n, Z_{n+1}$.
+
+## Un resultado previo {#sec-resprevio}
+
+Sean $U_1, \dots, U_n$ una muestra i.i.d de una variable aleatoria continua. Para un nivel de no cobertura $\alpha \in (0,1)$ y una observación $U_{n+1}$, nótese que:
+
+$$
+P(U_{n+1} \le \hat{q}_{1-\alpha}) \ge 1-\alpha
+$${#eq-Uresprevio}
+
+Donde $\hat{q}_{1-\alpha}$ es el cuantil de la muestra $U_1, \dots, U_n$ definido por:
+
+$$
+\hat{q}_{1-\alpha} = \begin{cases}
+  U_{(\lceil (n+1)(1-\alpha) \rceil)} \,\,\,\, \text{si} \,\,\,\, \lceil (n+1)(1-\alpha) \rceil \le n \\
+  \infty \,\,\,\, \text{en caso contrario}
+\end{cases}
+$${#eq-Ucases}
+
+Aquí $U_{(1)} \le \dots \le U_{(n)}$ son los estadísticos de orden de la muestra. Se verifica la cobertura en muestra finita de la @eq-Uresprevio: dada la independencia de las variables, el rango de $U_{n+1}$ en la muestra se distribuye uniforme en el conjunto $\{1, \dots, n+1\}$, entonces en nuestro problema de regresión observamos una muestra $Z_{i} = (X_{i},Y_{i}) ~ \in \mathbb{R}^{d} \times \mathbb{R} \sim P$ para la construcción de un intervalo de predicción para $Y_{n+1}$ dado las nuevas covariables $X_{n+1}$, que sigue la ley de probabilidad $P$, podemos construir un intervalo de predicción siguiendo la metdología mencioanda a continuación.
+
+## Método _naive_ de construcción de intervalos {#sec-naive}
+
+Usando el resultado previo de la sección anterior y en el contexto de regresión planteado en la Sección @sec-intro, un método sencillo para contruir un intervalo predictivo para $Y_{n+1}$ ante el valor $X_{n+1}$ es:
+
+$$
+C_{naive}(X_{n+1}) = \left[ \hat{\mu}(X_{n+1}) - \hat{F}^{-1}_n (1-\alpha), \hat{\mu}(X_{n+1}) + \hat{F}^{-1}_n (1-\alpha) \right]
+$${#eq-Cnaive}
+
+donde $\hat{\mu}$ es un estimador de la función de regresión, $\hat{F}_n$ la distribución empírica de los residuos dentro de la muestra $|Y_i - \hat{\mu}(X_{i})|$, $i=1,\dots,n$ y ${F}^{-1}_n (1-\alpha)$ el cuantil $1-\alpha$ de $\hat{F}_n$.
+
+Este método es aproximadamente válido para muestras grandes, bajo la condición de que $\hat{\mu}$ sea lo suficientemente preciso, es decir, que ${F}^{-1}_n (1-\alpha)$ esté cerca del cuantil $1-\alpha$ de $|Y_i - \mu(X_{i})|$. Para que esto se cumpla en general es necesario el cumplimiento de condiciones de regularidad tanto para la distribución $F$ de los datos y para $\hat{\mu}$, como que el modelo esté correctamente especificado.   
+
+Un problema de este método es que los intervalos pueden presentar una considerable sub-cobertura, dado que se están empleando los residuos dentro de la muestra. Para subsanar esto, en @lei2017 se plantea la metodología de los intervalos de predicción conformales.
+
+## Intervalos de predicción conformales
+
+Para cada valor $y \in \mathbb{R}$ se construye un estimador de regresión aumentado $\hat{\mu}_y$, el cual se estima en el conjunto de datos aumentado $Z_1,\dots\,Z_n, (X_{n+1}, y)$. Luego, se define:
+
+$$R_{y,i} = |Y_i - \hat{\mu}_y(X_i)|, \,\,\, i = 1,\dots,n$${#eq-residuoconf1}
+
+$$R_{y,n+1} = |y - \hat{\mu}_y(X_{n+1})|$${#eq-residuoconf2}
+
+Con el rango de $R_{y,n+1}$ entre los demás residuos de la muestra $R_{y,1}, \dots, R_{y,n}$ se calcula:
+
+$$
+\pi(y) = \frac{1}{n+1}\sum_{i=1}^{n+1}\mathbb{I}\{R_{y,i} \le R_{y,n+1}\} = \frac{1}{n+1} + \frac{1}{n+1}\sum_{i=1}^{n}\mathbb{I}\{R_{y,i} \le R_{y,n+1}\}
+$${#eq-piy}
+
+que es la proporción de los puntos de la muestra aumentada cuyos residuos dentro de la muestra son más pequeños que el residuo $R_{y,n+1}$. Como los datos son i.i.d. y suponiendo la simetría de $\hat{\mu}$, se puede apreciar que el estadístico $\pi(Y_{n+1})$ se distribuye uniforme en ${1/(n+1), 2/(n+1),\dots,1}$, lo cual implica:
+
+$$
+P((n+1)\pi(Y_{n+1})\le \lceil (1-\alpha)(n+1)\rceil) \ge 1-\alpha
+$${#eq-probconf}
+
+Esta expresión se puede interpretar como que $1-\pi(Y_{n+1})$ da un valor-p válido conservador para la prueba de hipótesis donde $H_0) Y_{n+1} =y$.
+
+Aplicando dicha prueba sobre todos los posibles valores de $y \in \mathbb{R}$, la ecuación @eq-probconf lleva al intervalo de predicción conformal evaluado en $X_{n+1}$:
+
+$$
+C_{conf}(X_{n+1}) = \left[y \in \mathbb{R}: (n+1)\pi(Y_{n+1})\le \lceil (1-\alpha)(n+1) \rceil \right]
+$${#eq-Cconf}
+
+Cada vez que se quiere obtener un intervalo de predicción en un nuevo conjunto de covariables se tienen que recalcular los pasos @eq-residuoconf1, @eq-residuoconf2, @eq-piy y @eq-Cconf. En la práctica, se restringen los valores de $y$ a una grilla discreta.
+
+El procedimiento para obtener el intervalo se puede resumir en el Algoritmo \ref{alg:algo1}.
+
+
+\begin{algorithm}[!ht]
+\caption{Intervalo de predicción conformal \label{alg:algo1}}
+
+\DontPrintSemicolon
+  
+  \KwInput{Datos $(X_i, Y_i)$, $i =1, \dots, n$, nivel de no cobertura $\alpha \in (0,1)$, algoritmo de regresión $\mathcal{A}$, puntos $\mathcal{X}_{nuevo}$ en los que construir intervalos de predicción y valores $\mathcal{Y}_{prueba} = \{y_1,y_2,\dots\}$ para comparar con la predicción.}
+
+
+  \KwOutput{Intervalos de predicción, en cada elemento de $\mathcal{X}_{nuevo}$}
+  
+  \For{$x \in \mathcal{X}_{nuevo}$}
+    {
+      \For{$y \in \mathcal{Y}_{prueba}$}
+        {
+          $\hat{\mu}_y = \mathcal{A}(\{(X_1, Y_1), \dots, (X_n,Y_n), (x,y)\})$\;
+
+          $R_{y_i} = |Y_i-\hat{\mu}_y(X_i)|, \,\, i=1,\dots,n$ y $R_{y,n+1}=|y-\hat{\mu}_y(x)|$\;
+
+          $\pi(y) = (1+\sum_{i=1}^n \mathbb{I}\{R_{y,i} \le R_{y, n+1} \})/(n+1)$\;
+        } 
+
+        $C_{conf}(x) = \left[y \in \mathbb{R}: (n+1)\pi(Y_{n+1})\le \lceil (1-\alpha)(n+1) \rceil  \right]$\;
+    }
+    Se devuelve $C_{conf}(x)$ para cada $X \in \mathcal{X}_{nuevo}$.
+
+\end{algorithm}
+
+
+### Teorema {#sec-teorema1}
+
+El intervalo @eq-Cconf tiene cobertura válida para muestras finitas por construcción y a su vez no presenta sobrecobertura. Esto se puede expresar mediante las expresiones @eq-cobCconf y @eq-cobCconf2, respectivamente:
+
+Sea $(X_i, Y_i)$, $i=1,\dots,n$ v.a. i.i.d, entonces para la nueva observación i.i.d. $(X_{n+1}, Y_{n+1})$:
+
+$$
+P(Y_{n+1}\in C_{conf}(X_{n+1})) \ge 1-\alpha
+$${#eq-cobCconf}
+
+Adicionalmente, si se hace el supuesto que para todo $y \in \mathbb{R}$ los residuos dentro de la muestra $R_{y,i} = |Y_i - \hat{\mu}_y(X_i)|$, $i=1,\dots,n$ tienen una distribución conjunta continua se cumple que:
+
+$$
+P(Y_{n+1}\in C_{conf}(X_{n+1})) \le 1-\alpha + \frac{1}{n+1}
+$${#eq-cobCconf2}
+
+
+::: {.remark}
+Nótese que las probabilidades aquí, al tomarse sobre la muestra aumentada i.i.d. implican cobertura promedio (o marginal). Esto no es lo mismo que la cobertura condicional $P(Y_{n+1} \in C_{conf}(x)| X_{n+1}=x) \ge 1-\alpha \,\,\, \forall \,\,\, x \in \mathbb{R}^d$. Esta última es una propiedad más fuerte y no puede lograrse con intervalos predictivos de amplitud finita sin que el modelo y el estimador cumplan condiciones de regularidad y consistencia.
+:::
+
+
+::: {.remark}
+Si se mejora el estimador $\hat{\mu}$, en general el intervalo de predicción conformal decrece en tamaño. Esto se da debido a que un $\hat{\mu}$ más preciso lleva a residuos más pequeños y los intervalos conformales están definidos por los cuantiles de la distribución aumentada de los residuos.
+:::
+
+## Intervalos de predicción conformales con muestras separadas
+
+Un problema práctico de los intervalos de inferencia conformal de la sección anterior es que tienen mucho costo computacional. Para poder concluir si $y \in C_{conf}(X_{n+1})$, para cualquier $X_{n+1}$ y $y$, se tiene que reestimar el modelo en la muestra aumentada que incluye el nuevo punto $X_{n+1}$ y recalcular y reordenar los nuevos residuos obtenidos.
+
+Para enfrentar esta problemática se puede hacer uso de una metodología denominada por @lei2017 como predicción conformal separada (_split conformal prediction_). Su costo computacional es menor (es el del paso de estimación únicamente) y tiene menos requerimientos de memoria (solo hay que guardar las variables seleccionadas cuando se evalúa el ajuste en los nuevos puntos $X_i$, $i \in \mathcal{I}_2$). Se presenta en el Algoritmo \ref{alg:algo2}.  
+
+\begin{algorithm}[!ht]
+\caption{Intervalos de predicción conformales con muestras separadas \label{alg:algo2}}
+
+\DontPrintSemicolon
+  
+  \KwInput{Datos $(X_i, Y_i)$, $i =1, \dots, n$, nivel de no cobertura $\alpha \in (0,1)$, algoritmo de regresión $\mathcal{A}$.}
+
+  \KwOutput{Intervalos de predicción, sobre $x \in \mathbb{R}^d$}
+  
+    Se separa la muestra al azar en dos subconjuntos de igual tamaño $\mathcal{I}_1$ e $\mathcal{I}_2$. \;
+
+    $\hat{\mu}_y = \mathcal{A}(\{(X_i, Y_i): i \in \mathcal{I}_1 \})$\;
+
+    $R_{i} = |Y_i-\hat{\mu}_y(X_i)|$, $i \in \mathcal{I}_2$\;
+
+    $d=$ el k-ésimo valor más pequeño en $\{R_i: i \in \mathcal{I}_2\}$, donde $k=\lceil (n/2 +1)(1-\alpha) \rceil$ \;
+    
+    Se devuelve $C_{split}(x)=[\hat{\mu}-d, \hat{\mu}+d]$ para todo $x \in \mathbb{R}^d$.
+
+\end{algorithm}
+
+### Teorema 
+
+Sea $(X_i, Y_i)$, $i=1,\dots,n$ v.a. i.i.d, entonces para la nueva observación i.i.d. $(X_{n+1}, Y_{n+1})$:
+
+$$
+P(Y_{n+1}\in C_{splt}(X_{n+1})) \ge 1-\alpha
+$${#eq-cobCsplit}
+
+Adicionalmente, si se hace el supuesto que los residuos $R_{i}$, $i \in \mathcal{I}_2$ tienen una distribución conjunta continua se cumple que:
+
+$$
+P(Y_{n+1}\in C_{split}(X_{n+1})) \le 1-\alpha + \frac{2}{n+2}
+$${#eq-cobCsplit2}
+
+### Teorema
+
+Los intervalos de predicción conformales con muestras separadas dan una garantía aproximada de cobertura dentro de la muestra. Esto se puede expresar como que existe una constante $c>0$ tal que, para cualquier $\epsilon>0$:
+
+$$
+P\left( \frac{2}{n} \sum_{i \in \mathcal{I}_2} \mathbb{I} \{Y_I \in C_{split}(X_i) - (1-\alpha) \ge \epsilon\} \right) \le 2 \exp{(-cn^2(\epsilon-4/n)^2)}
+$${#eq-cobCsplitInSample}
+
+Esto implica cobertura dentro de la muestra para la muestra $\mathcal{I}_2$, revirtiendo los roles de $\mathcal{I}_1$ e $\mathcal{I}_2$ se puede extender para toda la muestra.
+
+::: {.remark}
+También se puede aplicar este método con una separación no balanceada de la muestra, con $|\mathcal{I}_1|= \rho n$ e $|\mathcal{I}_2|= (1-\rho)n$, para $\rho \in (0,1)$. Esto puede ser útil en situaciones donde el procedimiento de regresión es complejo y puede resultar beneficioso elegir $\rho > 0,5$, para que $\hat{\mu}$ sea más preciso.
+::: 
+
+## Intervalos conformales con múltiples separaciones de la muestra
+
+Al considerar diferentes divisiones estamos introduciendo una fuente **adicional** de aleatoriedad a nuestra estimación, por tanto, el método de dividir la muestra reduce el costo computacional pero introduce ruido provocando una mayor incertidumbre en nuestras predicciones.
+
+Una manera de corregirlo es combinar las diferentes inferencias realizadas en $N$ particiones independientes, construyendo así, $C_{split,1}$,$\cdots$,$C_{split,N}$, en donde cada intervalo es construido a un nivel de significación $\alpha^{*} = 1 - \alpha/N$ y su relación esta dada de la siguiente manera:
+
+$$
+C^{N}_{split}(x) = \cap_{j = 1}^{N} C_{split,j}(x) ~~ x \in R^{d}
+$$
+
+Como se puede apreciar, al utilizar este procedimiento hay un precio que debemos de pagar, los intervalos se vulven mas anchos a medida que $N$ crece, esto puede verse de la siguiente manera:
+
+Como sabemos, la cobertura marginal de nuestra predicción tiene una cobertura de al menos $1-\alpha$ por construcción, además con el algoritmo \ref{alg:algo2} podemos acotar aún mas esta probabilidad:
+
+$$
+1 - \alpha \leq P(Y_{n+1} \in C_{split}\left(X_{n+1}\right)) \leq 1 - \alpha + \frac{2}{n + 2} \leq 1
+$${#eq-cota-cobertura}
+
+En nuestro caso, cada partición esta construida con un nivel de significación $\alpha^{*} = \alpha/N$, por tanto remplazando esta identidad en \ref{eq-cota-cobertura}, obtenemos la siguiente expresión
+
+$$
+1 - \frac{\alpha}{N} \leq P(Y_{n+1} \in C_{split}\left(X_{n+1}\right)) \leq 1 - \frac{\alpha}{N} + \frac{2}{n + 2} \leq 1
+$$
+
+Es por esto que si aumentamos $N$ el término $\alpha^{*}$ se vuelve aún mas chico y debido a que estamos frente a una medida de probabilidad esta se acerca cada vez más a uno, por tanto, nuestros intervalos se vuelven aún mas estrechos.
+
+
+## Intervalos predictivos mediante Jackknife
+
+Esta metodología emplea los cuantiles de los residuos de validación cruzada dejando una observación fuera (_leave-one-out_) para calcular los intervalos de predicción. 
+
+
+\begin{algorithm}[!ht]
+\caption{Intervalo de predicción conformal mediante Jackknife. \label{alg:algo3}}
+
+\DontPrintSemicolon
+  
+  \KwInput{Datos $(X_i, Y_i)$, $i =1, \dots, n$, nivel de no cobertura $\alpha \in (0,1)$, algoritmo de regresión $\mathcal{A}$.}
+
+
+  \KwOutput{Intervalos de predicción sobre $x \in \mathbb{R}^d$.}
+  
+  \For{$i \in \{1, \dots, n \}$}
+    {
+      $\hat{\mu}^{(-i)} = \mathcal{A}(\{(X_l, Y_l): l \ne i\})$\;
+
+      $R_{i} = |Y_i - \hat{\mu}^{(-i)}(X_i)|$\;
+    }
+    
+    $d =$ el k-ésimo valor más pequeño en $\{R_i: i \in \{1, \dots, n\} \}$, con $k = \lceil n(1-\alpha)\rceil$\;
+    
+    Se devuelve $C_{jack}(x) = [\hat{\mu}(x)-d,\hat{\mu}(x)+d]$ para todo $x \in \mathbb{R}^d$\;
+
+\end{algorithm}
+
+
+
+Tiene la ventaja que emplea más de la muestra que se aparta para entrenar cuando se calculan los residuos, lo cual frecuentemente lleva a intervalos de menor amplitud. Como desventaja, los intervalos que se obtienen no garantizan cobertura válida fuera de la muestra cuando se trabaja con muestras finitas e incluso asintóticamente la cobertura depende de condiciones del estimador.
+
+
+# Aplicación
+
+En esta sección se presentan aplicaciones de las metoodlogías de inferencia conformal mediante el software _R_ [@r2022]. Los ejemplos de programación manual de los intervalos están basados en los presentados en @samii2019.
+
+En primera instancia, simulamos un conjunto de datos para realizar las estimaciones. En este caso es una mixtura de normales de media 0 y varianza 1.
+
+```{r,echo = FALSE}
+
+
+hook_output <- knitr::knit_hooks$get("output")
+
+# set a new output hook to truncate text output
+knitr::knit_hooks$set(output = function(x, options) {
+  if (!is.null(n <- options$out.lines)) {
+    x <- xfun::split_lines(x)
+    if (length(x) > n) {
+      # truncate the output
+      x <- c(head(x, n), "....\n")
+    }
+    x <- paste(x, collapse = "\n")
+  }
+  hook_output(x, options)
+})
+
+```
+
+
+```{r}
+set.seed(12345)
+n <- 1000
+
+U <- rnorm(n)
+X <- rnorm(n)
+
+Y <- X + U
+regData <- data.frame(X,Y)
+```
+
+Por construcción, los datos tienen una relación lineal, lo cual se puede ver visualmente en la @fig-datos_demo
+
+```{r}
+#| label: fig-datos_demo
+#| echo: FALSE
+#| fig-cap: "Gráfico de dispersión de los datos de ejemplo."
+
+plot(X, Y)
+```
+
+
+Luego, realizamos estimaciones de la función de regresión y guardamos los residuos. En primera instancia una estimación paramétrica por mínimos cuadrados:
+
+```{r}
+fitlm <- lm(Y~X, data=regData)
+
+eVec_lm <- abs(fitlm$residuals)
+```
+
+Y también una estimación no paramétrica  usando el estimador Naradaya-Watson:
+```{r}
+fitnw <- ksmooth(
+  X, 
+  Y, 
+  kernel = "normal",
+  bandwidth = 0.2
+)
+
+eVec_nw <- abs(fitnw$y-Y)
+```
+
+Los histogramas de los residuos en valor absoluto para ambas estimaciones se pueden observar en la @fig-hist_e. Nótese como la estimación no paramétrica es más dispersa en este caso. Dado que los métodos de inferencia conformal dependen fuertemente del estimador, los intervalos probablemente se vean afectados por esta diferencia. 
+
+```{r}
+#| label: fig-hist_e
+#| echo: FALSE
+#| fig-cap: "Histogramas de los residuos en valores absolutos"
+par(mfrow = c(1,2))
+hist(eVec_lm)
+hist(eVec_nw)
+```
+
+
+## Método naive
+
+```{r}
+Xnew <- seq(-4,4,0.25)
+
+# Estimacion paramétrica
+muHat_lm <- predict(
+  fitlm, 
+  newdata=data.frame(X=Xnew)
+)
+
+# Intervalos al 5% de confianza para lm
+C.X_lm_lwr <- c(
+  muHat_lm - quantile(eVec_lm, .975)
+)
+
+C.X_lm_uppr <- c(
+  muHat_lm + quantile(eVec_lm, .975)
+)
+
+# Estimacion no paramétrica
+muHat_nw <-  ksmooth(
+  X, 
+  Y, 
+  kernel = "normal",
+  bandwidth = 0.2,
+  x.points = Xnew 
+)
+
+# Intervalos al 5% de confianza para nw
+C.X_nw_lwr <- c(
+  muHat_nw$y - quantile(eVec_nw, .975)
+)
+
+C.X_nw_uppr <- c(
+  muHat_nw$y + quantile(eVec_nw, .975)
+)
+
+resultados_conf_naive <- data.frame(
+  Xnew,
+  muHat_lm,
+  muHat_nw$y,
+  C.X_lm_lwr,
+  C.X_lm_uppr,
+  C.X_nw_lwr,
+  C.X_nw_uppr
+)
+
+```
+
+
+Luego, gráficamos ambas estimaciones con sus respectivos intervalos [@fig-plot_naive]. Se puede apreciar como los intervalos dependen de la calidad del estimador, en este caso la estimación no paramétrica no fue optimizada y como resultado el intervalo es mucho más amplio que el de la regresión lineal.
+
+```{r}
+#| label: fig-plot_naive
+#| echo: FALSE
+#| fig-cap: "Gráfico de dispersión de datos de prueba, con estimaciones e intervalos mediante modelo lineal MCO (rojo) y Naradaya-Watson (azul)." 
+
+par(mfrow = c(1,1))
+
+plot(
+  X,
+  Y
+)
+
+
+# Plots Modelo lineal
+lines(
+  resultados_conf_naive$Xnew,
+  resultados_conf_naive$muHat_lm,
+  col = "red",
+  cex = 1.5
+)
+
+lines(
+  resultados_conf_naive$Xnew,
+  resultados_conf_naive$C.X_lm_lwr,
+  col = "red",
+  cex = 1.5,
+  lty = "dashed"
+)
+
+lines(
+  resultados_conf_naive$Xnew,
+  resultados_conf_naive$C.X_lm_uppr,
+  col = "red",
+  cex = 1.5,
+  lty = "dashed"
+)
+
+# Plots Naradaya-Watson
+lines(
+  resultados_conf_naive$Xnew,
+  resultados_conf_naive$muHat_nw,
+  col = "blue",
+  cex = 1.5
+)
+
+lines(
+  resultados_conf_naive$Xnew,
+  resultados_conf_naive$C.X_nw_lwr,
+  col = "blue",
+  cex = 1.5,
+  lty = "dashed"
+)
+
+lines(
+  Xnew,
+  C.X_nw_uppr,
+  col = "blue",
+  cex = 1.5,
+  lty = "dashed"
+)
+
+```
+
+
+
+## Método conformal simple
+
+```{r}
+
+#nEval <- 200
+
+yCand <- seq(
+  from = min(Y)-1, 
+  to = max(Y)+1, 
+  by = 0.1
+)
+
+confPredict <- function(y, Xin){
+  
+  nData <- nrow(regData)  
+  regData.a <- rbind(regData,c(Xin, y))
+  
+  fitlm.a <- lm(Y~X, data=regData.a)
+  
+  resOut <- abs(fitlm.a$residuals)
+  resOut_new <- resOut[length(resOut)]
+  
+  pi.y <- mean(
+    apply(
+      as.matrix(resOut),
+      1,
+      function(x){x<=resOut_new}
+    )
+  )
+  
+  testResult <- pi.y*(nData+1) <= ceiling(.975*(nData+1))
+
+  return(testResult)
+}
+
+
+
+Cxa <- matrix(
+  0, 
+  nrow = length(Xnew), 
+  ncol=2
+  )
+
+for(i in 1:length(Xnew)){
+  Cxa[i,] <- range(
+    yCand[sapply(yCand, confPredict, Xin=Xnew[i])]
+  )
+}
+
+
+
+resultados_conf_simple <- data.frame(
+  Xnew,
+  muHat_lm, # La estimacion puntual es la misma
+  Cxa_lm_lwr = Cxa[,1],
+  Cxa_lm_uppr = Cxa[,2],
+  C.X_lm_lwr,
+  C.X_lm_uppr
+)
+
+```
+
+En la @fig-plot_simple se presenta tanto los intervalos con el método conformal simple como con el naive. Se puede notar que los intervalos son casi idénticos. La rugosidad se debe a que estamos trabajando en una grilla y no el recorrido continuo.
+
+```{r}
+#| label: fig-plot_simple
+#| echo: FALSE
+#| fig-cap: "Gráfico de dispersión de datos de prueba, con estimaciones mediante regresión lineal e intervalos conformales simples (rojo) y naive (azul)." 
+
+plot(
+  X,
+  Y
+)
+
+# Plots Modelo lineal
+lines(
+  resultados_conf_simple$Xnew,
+  resultados_conf_simple$muHat_lm,
+  col = "red",
+  cex = 1.5
+)
+
+lines(
+  resultados_conf_simple$Xnew,
+  resultados_conf_simple$Cxa_lm_lwr,
+  col = "red",
+  cex = 1.5,
+  lty = "dashed"
+)
+
+lines(
+  resultados_conf_simple$Xnew,
+  resultados_conf_simple$Cxa_lm_uppr,
+  col = "red",
+  cex = 1.5,
+  lty = "dashed"
+)
+
+
+lines(
+  resultados_conf_simple$Xnew,
+  resultados_conf_simple$C.X_lm_lwr,
+  col = "blue",
+  cex = 1.5,
+  lty = "dashed"
+)
+
+lines(
+  resultados_conf_simple$Xnew,
+  resultados_conf_simple$C.X_lm_uppr,
+  col = "blue",
+  cex = 1.5,
+  lty = "dashed"
+)
+```
+
+
+## Split
+
+El método de intervalos conformales con separaciones de la muestra (_splits_) es más eficiente computacionalmente. 
+
+```{r}
+
+splitConfPredict <- function(Xin){
+  nData <- nrow(regData)
+  regData$index <- 1:nData
+  regData$split <- 1
+  regData$split[sample(regData$index, floor(nrow(regData)/2), replace=F)] <- 2
+  fitlm.spl <- lm(Y~X, data=subset(regData, split==1))
+  resOut <- abs(
+    subset(regData, split==2)$Y -
+     predict(fitlm.spl, newdata=subset(regData, split==2))
+  )
+  kOut <- ceiling(((nData/2)+1)*(.975))
+  resUse <- resOut[order(resOut)][kOut]
+  
+  Y.hat <- predict(fitlm.spl, newdata=data.frame(X=Xin))
+  C.split <- c(Y.hat-resUse, Y.hat, Y.hat+resUse)
+  return(C.split)
+}
+
+Csplit <- t(sapply(Xnew, FUN = splitConfPredict))
+
+resultados_conf_split <- data.frame(
+  Xnew,
+  muHat_lm = muHat_lm, # La estimacion puntual es la misma
+  Csplit_lwr = Csplit[,1],
+  Csplit_uppr = Csplit[,3],
+  Cxa_lm_lwr = Cxa[,1],
+  Cxa_lm_uppr = Cxa[,2]
+)
+```
+
+En la @fig-plot_split se puede observar los intervalos con el método con _split_. Estos intervalos parecen ser un tanto más amplios que los calculados mediante el método simple. 
+
+```{r}
+#| label: fig-plot_split
+#| echo: FALSE
+#| fig-cap: "Gráfico de dispersión de datos de prueba, con estimaciones mediante regresión lineal e intervalos conformales split (rojo) y simples (azul)." 
+
+plot(
+  X,
+  Y
+)
+
+# Plots Modelo lineal
+lines(
+  resultados_conf_split$Xnew,
+  resultados_conf_split$muHat_lm,
+  col = "red",
+  cex = 1.5
+)
+
+lines(
+  resultados_conf_split$Xnew,
+  resultados_conf_split$Csplit_lwr,
+  col = "red",
+  cex = 1.5,
+  lty = "dashed"
+)
+
+lines(
+  resultados_conf_split$Xnew,
+  resultados_conf_split$Csplit_uppr,
+  col = "red",
+  cex = 1.5,
+  lty = "dashed"
+)
+
+
+lines(
+  resultados_conf_split$Xnew,
+  resultados_conf_split$Cxa_lm_lwr,
+  col = "blue",
+  cex = 1.5,
+  lty = "dashed"
+)
+
+lines(
+  resultados_conf_split$Xnew,
+  resultados_conf_split$Cxa_lm_uppr,
+  col = "blue",
+  cex = 1.5,
+  lty = "dashed"
+)
+```
+
+\newpage
+
+
+# Conclusión
+
+Si bien en la práctica los intervalos de predicción pueden llegar a ser confusos para personas sin conocimiento de estadística, es importante destacar su utilidad en la toma de decisiones, cualquier metodología que aborde sobre la mejora de estos es de gran relevancia; como la metodología expuesta en este articulo.
+
+Con este articulo se ha revisado cómo implementar intervalos de predicción conformales para cualquier modelo de regresión. Estos alogritmos requieren únicamente asumir que los datos tienen independencia entre sí, pero ninguna forma funcional sobre los regresores, matriz de diseño o distribución de probabilidad para los residuos. Esto último puede llegar a ser una gran ventaja para modelos en donde no es tan claro la construcción de intervalos de predicción, que usualmente son aproximados con boostrap, como pueden ser los métodos de ensamble o en aquellos modelos donde se hacen supuestos fuertes sobre la distribución de los datos basados en resultados asintóticos.
+
+El considerar este tipo de metodologías nos permite reducir la incertidumbre respecto a un intervalo de predicción clásico como pudimos ver en el @sec-teorema1. Es importante mencionar que se cuenta con una implementación por parte de los autores de @lei2017 en la librería **conformalInferece** [@tibshirani2019] -ver @sec-conformalInferece - de R con modelos de regresión ampliamente utilizados en la práctica, como son los modelos de regresión lineal, splines, glm, random forest, etc.
+
+Cabe destacar que la inferencia conformal es aplicada frecuentemente en la actualidad a modelos de machine learning. Estas metdologías pueden complementar los métodos basados únicamente en boostrap para estimación de varianzas para cualquier algortimo de regresión,ya que al agregar el supuesto de que el estimador es consistente se puede obtener un intervalo de predicción consistente, con cobertura condicional apropiada.
+
+
+
+
+# Bibliografía
+
+
+::: {#refs}
+:::
+
+\appendix
+
+# Anexo {.appendix}
+
+## Paquete conformalInference {#sec-conformalInferece}
+
+El paquete de _R_ _conformalInference_ [@tibshirani2019] ya tiene implementadas todas estas herramientas de inferencia conformal.
+
+En concreto, la función `conformal.pred` permite realizar intervalos de predicción conformales para cualquier modelo de regresión, además de su versión menos costosa en términos computacionales, los intervalos con _splits_, mediante `conformal.split`.
+
+
+```{r,echo = FALSE}
+if(!require("conformalInference")){
+  devtools::install_github(repo="ryantibs/conformal", subdir="conformalInference")
+  library(conformalInference)
+}
+```
+
+
+```{r}
+
+names(formals(conformal.pred))
+
+```
+
+
+Los argumentos de la función `conformal.pred` son los siguientes:
+
+- x -> Vector de variables independientes (nxp)
+- y -> Vector de variables dependientes n
+- xo -> Matriz de variables independientes para predcir un nuevo y (n0xp)
+- train.fun -> Función para mejorar la performance del modelo, varía en cada una de sus especificaciones.
+- predcit.fun -> Función que se utilizará para predcir el nuevo valor de y
+- alpha -> Valor de cobertura
+- ...
+
+La documentación completa se encuentra en el siguiente link: \url{https://github.com/ryantibs/conformal/blob/master/conformalInference.pdf}
+
+
+Para cada argumento *.fun están implementados los siguientes modelos por defecto:
+
+- **Modelo de regresión lineal** (Implementación propia de MCO usando descomposición de Cholesky) `lm.funs()`
+- **Random Forest** (via randomForets) `rf.funs()`
+- **Splines** (via splines) `smooth.splines.funs()`
+- **Elastic Net** (via glmnet) `elastic.funs()`
+
+Para el caso de `train.fun` y `predict.fun` se pueden implementar funciones propias, dependiendo del modelo su implementación puede variar.
+
+## Implementación de un modelo de regresión lineal
+
+```{r}
+train.fun = function(x,y,out=NULL) {
+  n = nrow(x); p = ncol(x)
+  v = rep(1,p)
+  
+  if (intercept) {
+    x = cbind(rep(1,n),x)
+    v = c(0,v)
+  }
+  if (!is.null(out)) {
+    chol.R = out$chol.R
+  }
+  else {
+    chol.R = vector(mode="list",length=m)
+    for (j in 1:m) {
+      chol.R[[j]] = chol(crossprod(x) + lambda[j]*diag(v))
+    }
+  }
+  beta = matrix(0,p+intercept,m)
+  for (j in 1:m) {
+    beta[,j] = chol.solve(chol.R[[j]], t(x) %*% y)
+  }
+  
+  return(list(beta=beta,chol.R=chol.R))
+}
+```
+
+
+```{r}
+predict.fun = function(out,newx) {
+  if (intercept) {
+    newx = cbind(rep(1,nrow(newx)),newx)
+  }
+  return(newx %*% out$beta)
+}
+```
+
+\newpage
+
+## Ejemplo para implementar Nadaraya–Watson
+
+```{r}
+train.fun_ks <- function(x,y,out=NULL) {
+  
+  kernel = "normal"
+  bandwidth = 0.2
+
+  out <- ksmooth(
+    X, 
+    Y,
+    kernel,
+    bandwidth = bandwidth
+  )
+
+  list(
+    x = out$x,
+    y = out$y,
+    kernel = kernel,
+    bandwidth = bandwidth
+  )
+
+}
+
+predict.fun_ks <- function(out, newx) {
+  return(
+    ksmooth(
+      x = out$x,
+      y = out$y,
+      out$kernel,
+      out$bandwidth,
+      x.points = newx 
+    )$y
+  )
+}
+```
+
+
+Si bien en el paquete tiene implementado diferentes modelos, como es el ejemplo de la regresión lineal no paramétrica de Nadaraya–Watson, su resultado final no tiene asociado el método `predict` y devuelve una lista. Haciendo las modificaciones correspondientes, es posible utilizarlo en la función `conformal.pred`.
+
+### Ejemplo de predicción conformal para Nadaraya–Watson
+
+Hagamos una prueba, intentado predecir el valor de Y para $X = -1.5$, como en el ejemplo anterior:
+
+```{r,error = TRUE}
+
+res <- conformal.pred(
+  x = X,
+  y = Y,
+  x0 = Xnew,
+  train.fun = train.fun_ks,
+  predict.fun = predict.fun_ks,
+  num.grid.pts = 100
+)
+
+res$pred
+
+
+```
+
+
+Ahora, probemos con la versión utilizando particiones:
+
+```{r}
+resplit <- conformal.pred.split(
+  x = X,
+  y = Y,
+  x0 = Xnew,
+  train.fun = train.fun_ks,
+  predict.fun = predict.fun_ks
+)
+
+resplit$pred
+
+
+```
+
+Como sabemos, el resultado es el mismo. Elegir un método u otro impactará en la estimación de los invervalos de predicción, veamos cada uno de ellos:
+
+
+```{r}
+
+intervalo <- function(puntual,lo,uper) {
+  glue::glue(
+    "[{puntual} - {lo};{puntual} + {uper}]",
+    lo = round(puntual - lo,2),
+    uper = round(uper - puntual,2),
+    puntual = round(puntual,2)
+  )
+}
+
+
+# Invervalo con el método conformal
+
+intervalo(
+  res$pred,
+  res$lo,
+  res$up
+)
+
+
+# Intervelo con el método de split
+
+
+intervalo(
+  resplit$pred,
+  resplit$lo,
+  resplit$up
+)
+
+```
+
+
+Como podemos ver el método de split es más amplio, en concreto existe una mayor incertidumbre a la izquierda del valor predicho. Para comparar la eficiencia de los intervalos, comparemos su apertura relativa, respecto al método conformal entero:
+
+
+```{r}
+(resplit$lo-resplit$up) / (res$lo-res$up)
+
+```
+
+Podemos ver que el método de splitting es más amplio, pero solo en poco más de un 2\%.
+
+\newpage
+
+## Ejemplo regresión múltiple
+
+Tomando como ejemplo el dataset `state.x77` de R, vamos a intentar predecir la variable `life_exp` utilizando como variables explicativas `income`, `hs_grad`, `frost` y `area`.
+
+Vamos a entrenar el modelo con todas las observaciones, a excepción de una, que será la que queremos predecir, en concreto, la ciudad de Colorado.
+
+
+```{r,error = TRUE}
+
+
+# Semilla
+
+set.seed(1234)
+
+# Para arreglar los nombres
+
+normalize_names <- function(names) {
+  upper = tolower(names)
+  newNames = gsub(" ", "_", upper)
+  return(newNames)
+}
+
+df <- as.data.frame(state.x77)
+
+names(df) <- normalize_names(names(df))
+
+# Para elegir la observación a predecir
+
+test <- runif(1,1,nrow(df))
+
+# Vector de variables independientes
+
+
+Y = df[-test,c('life_exp')]
+
+
+# Matriz de diseño
+
+X = df[-test,c('income','hs_grad','frost','area')]
+
+row.names(X) <- NULL
+X = data.matrix(X, rownames.force = TRUE)
+
+
+# Matriz de diseño en los nuevos puntos
+
+x0 = data.matrix(
+  df[test,c('income','hs_grad','frost','area')],
+  rownames.force = TRUE
+)
+
+# No funciona con lm.funs, NW usamos RF!
+
+engine_rf = rf.funs(
+  ntree = 500,
+  varfrac = 0.333
+)
+
+train.fun = engine_rf$train.fun
+predict.fun = engine_rf$predict.fun
+
+res <- conformal.pred(
+  x = X,
+  y = Y,
+  x0 = x0,
+  train.fun = train.fun,
+  predict.fun = predict.fun
+)
+
+
+intervalo(
+  res$pred,
+  res$lo,
+  res$up
+)
+
+glue::glue(
+  "La expecativa de vida de la {ciudad} es {df[test,'life_exp']}",
+  ciudad = row.names(df[test,])
+)
+
+
+```
+
+
+Para la realización de este ejemplo, se intentó realizar la predicción con el modelo de regresión lineal tanto en su versión paramétrica como su versión de núcleo,el resultado esta repleto de valores NA, por lo que se optó por probar diferentes modelos de regresión no paramétrica, en concreto, Random Forest, el cual nos dio un resultado satisfactorio.
+
